@@ -1,11 +1,10 @@
 namespace Morpeh.Globals {
-    using System;
-    using UnityEngine;
-
     namespace ECS {
         using System;
         using System.Collections.Generic;
+        using UnityEngine;
 
+        [Serializable]
         internal struct GlobalEventMarker : IComponent {
         }
 
@@ -16,82 +15,70 @@ namespace Morpeh.Globals {
             protected Filter filterNextFrame;
 
 
-            internal abstract void Update();
+            internal abstract void Update(World world);
         }
 
         internal sealed class GlobalEventComponentUpdater<T> : GlobalEventComponentUpdater {
-            internal GlobalEventComponentUpdater(Filter rootFilter) {
-                var common = rootFilter.With<GlobalEventMarker>().With<GlobalEventComponent<T>>();
-
-                this.filter          = common.With<GlobalEventPublished>();
-                this.filterNextFrame = common.With<GlobalEventNextFrame>();
-            }
-
-            internal override void Update() {
-                foreach (var entity in this.filter) {
+            internal override void Update(World world) {
+                var common = world.Filter.With<GlobalEventMarker>().With<GlobalEventComponent<T>>();
+                foreach (var entity in common.With<GlobalEventPublished>().Without<GlobalEventNextFrame>()) {
                     ref var evnt = ref entity.GetComponent<GlobalEventComponent<T>>(out _);
                     evnt.Action?.Invoke(evnt.Data);
                     evnt.Data.Clear();
                     entity.RemoveComponent<GlobalEventPublished>();
                 }
-
-                foreach (var entity in this.filterNextFrame) {
-                    entity.AddComponent<GlobalEventPublished>();
+                foreach (var entity in common.With<GlobalEventPublished>().With<GlobalEventNextFrame>()) {
+                    ref var evnt = ref entity.GetComponent<GlobalEventComponent<T>>(out _);
+                    evnt.Action?.Invoke(evnt.Data);
+                }
+                foreach (var entity in common.With<GlobalEventNextFrame>()) {
+                    entity.SetComponent(new GlobalEventPublished ());
                     entity.RemoveComponent<GlobalEventNextFrame>();
                 }
             }
         }
 
 
+        [Serializable]
         internal struct GlobalEventComponent<TData> : IComponent {
             internal static bool Initialized;
 
             public Action<IEnumerable<TData>> Action;
-            public List<TData>                Data;
+            public Stack<TData>               Data;
         }
 
+        [Serializable]
         internal struct GlobalEventPublished : IComponent {
         }
 
+        [Serializable]
         internal struct GlobalEventNextFrame : IComponent {
         }
 
         internal sealed class ProcessEventsSystem : ILateSystem {
-            private World world;
-            private FilterProvider filter;
-
-            public World World {
-                get => this.world;
-                set => this.world = value;
-            }
-
-            public FilterProvider Filter {
-                get => this.filter;
-                set => this.filter = value;
-            }
+            public World World { get; set; }
 
             public void OnAwake() {
             }
 
-            public void OnStart() {
-                
-            }
-
             public void OnUpdate(float deltaTime) {
                 foreach (var updater in GlobalEventComponentUpdater.Updaters) {
-                    updater.Update();
+                    updater.Update(this.World);
                 }
             }
 
             public void Dispose() {
             }
         }
+    }
+}
 
-        internal static class InitializerECS {
-            [RuntimeInitializeOnLoadMethod]
-            private static void Initialize() {
-                World.Default.AddSystem(9999, new ProcessEventsSystem());
-            }
+namespace Morpeh {
+    partial class World {
+        partial void InitializeGlobals() {
+            var sg = this.CreateSystemsGroup();
+            sg.AddSystem(new Morpeh.Globals.ECS.ProcessEventsSystem());
+            this.AddSystemsGroup(9000, sg);
         }
     }
 }

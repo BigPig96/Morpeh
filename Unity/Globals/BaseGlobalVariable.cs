@@ -1,11 +1,21 @@
 ﻿namespace Morpeh.Globals {
     using System;
+    using JetBrains.Annotations;
+    using UnityEditor;
+    using UnityEngine;
 #if UNITY_EDITOR && ODIN_INSPECTOR
     using Sirenix.OdinInspector;
 #endif
-    using UnityEngine;
 
-    public abstract class BaseGlobalVariable<TData> : BaseGlobalEvent<TData> {
+    public interface IDataWrapper {
+        
+    }
+    
+    public interface IDataVariable {
+        IDataWrapper Wrapper { get; set; }
+    }
+    
+    public abstract class BaseGlobalVariable<TData> : BaseGlobalEvent<TData>, IDataVariable {
         [Space]
         [Header("Runtime Data")]
         [SerializeField]
@@ -16,18 +26,17 @@
         [HideLabel]
 #endif
         protected TData value;
-
-        private TData lastValue;
-
+        [HideInInspector]
+        [SerializeField]
+        private string defaultSerializedValue;
         private const string COMMON_KEY = "MORPEH__GLOBALS_VARIABLES_";
 #if UNITY_EDITOR && ODIN_INSPECTOR
         [HideInInlineEditors]
         [PropertyOrder(1)]
-        [ShowIf("@AutoSave")]
+        [ShowIf("@" + nameof(AutoSave) + " && " + nameof(CanBeAutoSaved))]
 #endif
         [SerializeField]
         private string customKey;
-
         // ReSharper disable once InconsistentNaming
         private string __internalKey;
 
@@ -41,18 +50,24 @@
             }
         }
 
+        public virtual bool CanBeAutoSaved => true;
         [Header("Saving Settings")]
 #if UNITY_EDITOR && ODIN_INSPECTOR
         [HideInInlineEditors]
         [PropertyOrder(0)]
+        [ShowIf(nameof(CanBeAutoSaved))]
 #endif
         public bool AutoSave;
-
+        private bool HasPlayerPrefsValue            => PlayerPrefs.HasKey(this.Key);
+        private bool HasPlayerPrefsValueAndAutoSave => PlayerPrefs.HasKey(this.Key) && this.AutoSave;
         private bool isLoaded;
 
+        public abstract IDataWrapper Wrapper { get; set; }
+        
         public TData Value {
             get {
                 if (!this.isLoaded) {
+                    this.defaultSerializedValue = this.Save();
                     this.LoadData();
                     this.isLoaded = true;
                 }
@@ -73,38 +88,55 @@
                 this.Publish(newValue);
                 this.SaveData();
             }
-#if UNITY_EDITOR
-            else {
-                this.editorBackfield = this.Save();
-            }
-#endif
         }
 
-        protected abstract TData  Load(string serializedData);
+        protected abstract TData  Load([NotNull] string serializedData);
         protected abstract string Save();
 
-        protected override void OnEnable() {
+        public virtual void Reset() {
+            if (!string.IsNullOrEmpty(this.defaultSerializedValue)) {
+                this.value = this.Load(this.defaultSerializedValue);
+            }
+        }
+
+        internal override void OnEnable() {
             base.OnEnable();
-            MApplicationFocusHook.OnApplicationFocusLost += this.SaveData;
+            this.defaultSerializedValue               =  this.Save();
+            UnityRuntimeHelper.OnApplicationFocusLost += this.SaveData;
 #if UNITY_EDITOR
             if (string.IsNullOrEmpty(this.customKey)) {
                 this.GenerateCustomKey();
             }
-
-            this.editorBackfield = this.Save();
-
-            UnityEditor.EditorApplication.playModeStateChanged += this.EditorApplicationOnPlayModeStateChanged;
-#endif
+#else
             this.LoadData();
+#endif
         }
 #if UNITY_EDITOR
-        //[Button]
-        //[PropertyOrder(3)]
+        internal override void OnEditorApplicationOnplayModeStateChanged(PlayModeStateChange state) {
+            base.OnEditorApplicationOnplayModeStateChanged(state);
+            if (state == PlayModeStateChange.EnteredEditMode) {
+                this.SaveData();
+                this.Reset();
+                this.defaultSerializedValue = default;
+                this.isLoaded               = false;
+            }
+            else if (state == PlayModeStateChange.EnteredPlayMode) {
+                this.LoadData();
+            }
+        }
+#endif
+#if UNITY_EDITOR && ODIN_INSPECTOR
+        [Button]
+        [PropertyOrder(3)]
+        [ShowIf("@AutoSave")]
+        [HideInInlineEditors]
+#endif
+#if UNITY_EDITOR
         private void GenerateCustomKey() => this.customKey = Guid.NewGuid().ToString().Replace("-", string.Empty);
 #endif
-        protected override void OnDisable() {
-            base.OnDisable();
-            MApplicationFocusHook.OnApplicationFocusLost -= this.SaveData;
+        public override void Dispose() {
+            base.Dispose();
+            UnityRuntimeHelper.OnApplicationFocusLost -= this.SaveData;
 #if UNITY_EDITOR
             if (!Application.isPlaying) {
                 return;
@@ -127,10 +159,9 @@
             }
 
             this.value = this.Load(PlayerPrefs.GetString(this.Key));
-            this.OnChange(this.value);
         }
 
-        private void SaveData() {
+        internal void SaveData() {
             if (this.AutoSave) {
                 PlayerPrefs.SetString(this.Key, this.Save());
             }
@@ -139,48 +170,13 @@
         #region EDITOR
 
 #if UNITY_EDITOR
-        //hack for save start values of GlobalVariables
-        private string editorBackfield;
-
-        private bool HasPlayerPrefsValue            => PlayerPrefs.HasKey(this.Key);
-        private bool HasPlayerPrefsValueAndAutoSave => PlayerPrefs.HasKey(this.Key) && this.AutoSave;
 #if UNITY_EDITOR && ODIN_INSPECTOR
         [HideInInlineEditors]
-        [PropertyOrder(2)]
-        [ShowInInspector]
-        [ShowIf("@HasPlayerPrefsValueAndAutoSave")]
-#endif
-        private TData PlayerPrefsValue {
-            get {
-                if (this.HasPlayerPrefsValue) {
-                    return this.Load(PlayerPrefs.GetString(this.Key));
-                }
-
-                return default;
-            }
-        }
-
-
-        private void EditorApplicationOnPlayModeStateChanged(UnityEditor.PlayModeStateChange state) {
-            if (state == UnityEditor.PlayModeStateChange.EnteredEditMode) {
-                this.SaveData();
-                this.value           = this.Load(this.editorBackfield);
-                this.editorBackfield = default;
-                this.isLoaded        = false;
-
-                UnityEditor.EditorApplication.playModeStateChanged -= this.EditorApplicationOnPlayModeStateChanged;
-            }
-            else if (state == UnityEditor.PlayModeStateChange.EnteredPlayMode) {
-                this.LoadData();
-            }
-        }
-#if UNITY_EDITOR && ODIN_INSPECTOR
-        [HideInInlineEditors]
-        [ShowIf("@HasPlayerPrefsValueAndAutoSave")]
+        [ShowIf("@" + nameof(HasPlayerPrefsValueAndAutoSave))]
         [PropertyOrder(4)]
         [Button]
 #endif
-        private void ResetPlayerPrefsValue() {
+        internal void ResetPlayerPrefsValue() {
             if (this.HasPlayerPrefsValue) {
                 PlayerPrefs.DeleteKey(this.Key);
             }
@@ -188,25 +184,7 @@
 #endif
 
         #endregion
-    }
 
-    internal static class InitializerGlobalVariables {
-        [RuntimeInitializeOnLoadMethod]
-        private static void Initialize() {
-            var go = new GameObject("MORPEH__HOOK_APPLICATION_FOCUS");
-            go.AddComponent<MApplicationFocusHook>();
-            go.hideFlags = HideFlags.HideAndDontSave;
-            UnityEngine.Object.DontDestroyOnLoad(go);
-        }
-    }
 
-    internal class MApplicationFocusHook : MonoBehaviour {
-        internal static Action OnApplicationFocusLost = () => { };
-
-        private void OnApplicationFocus(bool hasFocus) {
-            if (!hasFocus) {
-                OnApplicationFocusLost.Invoke();
-            }
-        }
     }
 }
