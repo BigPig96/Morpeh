@@ -28,6 +28,10 @@
 
     [Serializable]
     public struct BigNumber : IComparable<BigNumber>, IEquatable<BigNumber> {
+        public override bool Equals(object obj) => obj is BigNumber other && Equals(other);
+
+        public override int GetHashCode() => (this.digits != null ? this.digits.GetHashCode() : 0);
+
         private const int DIGIT_VALUE = 1000;
         private static readonly List<string> chars = new List<string>
         {
@@ -86,6 +90,25 @@
             this.digits[integerIndex] = integerPart;
             if(decimalIndex >= 0)
                 this.digits[decimalIndex] = decimalValue;
+        }
+
+        public BigNumber(int value) {
+            var digitIndex = 0;
+            var tmp = value;
+            this.digits = new List<int> {0};
+            while (tmp >= DIGIT_VALUE)
+            {
+                tmp /= DIGIT_VALUE;
+                digitIndex++;
+                this.digits.Add(0);
+            }
+
+            for (var i = digitIndex; i >= 0; --i)
+            {
+                var divider = IntPow(DIGIT_VALUE, i);
+                var decimalDivider = IntPow(DIGIT_VALUE, i + 1);
+                this.digits[i] = (value % decimalDivider) / divider;
+            }
         }
 
 
@@ -150,6 +173,9 @@
 
             return this;
         }
+
+        public static BigNumber operator +(BigNumber left, int right) => left + new BigNumber(right);
+        public static BigNumber operator -(BigNumber left, int right) => left - new BigNumber(right);
 
         public static BigNumber operator +(BigNumber left, BigNumber right) {
             var (maxNumber, minNumber) = left.digits.Count >= right.digits.Count ? (left, right) : (right, left);
@@ -252,5 +278,18 @@
         public static bool operator >=(BigNumber left, BigNumber right) => left.CompareTo(right) >= 0;
         public static bool operator ==(BigNumber left, BigNumber right) => left.Equals(right);
         public static bool operator !=(BigNumber left, BigNumber right) => !left.Equals(right);
+        
+        private static int IntPow(int x, int pow)
+        {
+            int ret = 1;
+            while ( pow != 0 )
+            {
+                if ( (pow & 1) == 1 )
+                    ret *= x;
+                x *= x;
+                pow >>= 1;
+            }
+            return ret;
+        }
     }
 }
