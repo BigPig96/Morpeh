@@ -5,12 +5,10 @@
     [Il2CppSetOption(Option.NullChecks, false)]
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
     [Il2CppSetOption(Option.DivideByZeroChecks, false)]
-    public abstract class FixedUpdateSystem : ScriptableObject, IFixedSystem {
+    public abstract class Initializer : ScriptableObject, IInitializer {
         public World World { get; set; }
 
         public abstract void OnAwake();
-
-        public abstract void OnUpdate(float deltaTime);
 
         public virtual void Dispose() {
         }

@@ -3,11 +3,20 @@ namespace Morpeh.Globals {
     using System.Collections.Generic;
     using ECS;
     using UnityEngine;
+#if ODIN_INSPECTOR
+#endif
+    using Unity.IL2CPP.CompilerServices;
 
-    public abstract class BaseGlobalEvent<TData> : ScriptableObject, IDisposable {
-        private Entity internalEntity;
-
-        public IEntity Entity {
+    [Il2CppSetOption(Option.NullChecks, false)]
+    [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
+    [Il2CppSetOption(Option.DivideByZeroChecks, false)]
+    public abstract class BaseGlobalEvent<TData> : BaseGlobal {
+        
+#if UNITY_EDITOR
+        public override Type GetValueType() => typeof(TData);
+#endif
+        
+        public Stack<TData> BatchedChanges {
             get {
 #if UNITY_EDITOR
                 if (!Application.isPlaying) {
@@ -15,80 +24,49 @@ namespace Morpeh.Globals {
                 }
 #endif
                 this.CheckIsInitialized();
-                return this.internalEntity;
-            }
-        }
-
-        public bool IsPublished {
-            get {
-#if UNITY_EDITOR 
-                if (!Application.isPlaying) {
-                    return default;
-                }
-#endif
-                this.CheckIsInitialized();
-                return this.internalEntity.Has<GlobalEventPublished>();
-            }
-        }
-
-        public List<TData> BatchedChanges {
-            get {
-#if UNITY_EDITOR
-                if (!Application.isPlaying) {
-                    return default;
-                }
-#endif
-                this.CheckIsInitialized();
-                ref var component = ref this.internalEntity.GetComponent<GlobalEventComponent<TData>>();
+                ref var component = ref this.InternalEntity.GetComponent<GlobalEventComponent<TData>>();
                 return component.Data;
             }
         }
 
+        private protected override void CheckIsInitialized() {
+            if (this.internalEntityID < 0) {
+                var ent = World.Default.CreateEntityInternal(out this.internalEntityID);
 
-        protected virtual void OnEnable() {
-            this.internalEntity = null;
-        }
-
-        protected virtual void OnDisable() {
-            this.internalEntity = null;
-        }
-
-        protected void CheckIsInitialized() {
-            if (this.internalEntity == null) {
-                this.internalEntity = World.Default.CreateEntityInternal();
-                this.internalEntity.AddComponent<GlobalEventMarker>();
-                this.internalEntity.SetComponent(new GlobalEventComponent<TData> {
+                ent.AddComponent<GlobalEventMarker>();
+                ent.SetComponent(new GlobalEventComponent<TData> {
                     Action = null,
-                    Data   = new List<TData>()
+                    Data   = new Stack<TData>()
                 });
+            }
 
-                if (!GlobalEventComponent<TData>.Initialized) {
-                    GlobalEventComponentUpdater.Updaters.Add(new GlobalEventComponentUpdater<TData>(this.internalEntity.World.Filter));
-                    GlobalEventComponent<TData>.Initialized = true;
-                }
+            if (!GlobalEventComponent<TData>.Initialized) {
+                GlobalEventComponentUpdater.Updaters.Add(new GlobalEventComponentUpdater<TData>());
+                GlobalEventComponent<TData>.Initialized = true;
             }
         }
 
+
         public void Publish(TData data) {
             this.CheckIsInitialized();
-            ref var component = ref this.internalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
-            component.Data.Add(data);
-            this.internalEntity.SetComponent(new GlobalEventPublished());
+            ref var component = ref this.InternalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
+            component.Data.Push(data);
+            this.InternalEntity.SetComponent(new GlobalEventPublished());
         }
-        
+
         public void NextFrame(TData data) {
             this.CheckIsInitialized();
-            ref var component = ref this.internalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
-            component.Data.Add(data);
-            this.internalEntity.SetComponent(new GlobalEventNextFrame());
+            ref var component = ref this.InternalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
+            component.Data.Push(data);
+            this.InternalEntity.SetComponent(new GlobalEventNextFrame());
         }
 
         public IDisposable Subscribe(Action<IEnumerable<TData>> callback) {
             this.CheckIsInitialized();
-            ref var component = ref this.internalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
+            ref var component = ref this.InternalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
             component.Action = (Action<IEnumerable<TData>>) Delegate.Combine(component.Action, callback);
 
-            var ent = this.internalEntity;
+            var ent = this.InternalEntity;
             return new Unsubscriber(() => {
                 if (ent == null) {
                     return;
@@ -97,25 +75,6 @@ namespace Morpeh.Globals {
                 ref var comp = ref ent.GetComponent<GlobalEventComponent<TData>>(out _);
                 comp.Action = (Action<IEnumerable<TData>>) Delegate.Remove(comp.Action, callback);
             });
-        }
-
-        public static implicit operator bool(BaseGlobalEvent<TData> exists) => exists.IsPublished;
-
-        private class Unsubscriber : IDisposable {
-            private readonly Action unsubscribe;
-            public Unsubscriber(Action unsubscribe) => this.unsubscribe = unsubscribe;
-            public void Dispose() => this.unsubscribe();
-        }
-
-        public void Dispose() {
-            if (this.internalEntity != null) {
-                this.internalEntity.Dispose();
-                World.Default.RemoveEntity(this.internalEntity);
-            }
-        }
-
-        private void OnDestroy() {
-            this.Dispose();
         }
     }
 }
