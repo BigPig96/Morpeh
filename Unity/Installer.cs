@@ -2,9 +2,7 @@
 #if UNITY_EDITOR
     using UnityEditor;
 #endif
-    using System.Collections.Generic;
     using System.Linq;
-    using Globals;
     using UnityEngine;
     using Utils;
 #if UNITY_EDITOR && ODIN_INSPECTOR
@@ -15,6 +13,7 @@
     [Il2CppSetOption(Option.NullChecks, false)]
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
     [Il2CppSetOption(Option.DivideByZeroChecks, false)]
+    [AddComponentMenu("ECS/" + nameof(Installer))]
     public sealed class Installer : BaseInstaller {
 #if UNITY_EDITOR && ODIN_INSPECTOR
         [Required]
@@ -25,7 +24,9 @@
         
 #if UNITY_EDITOR && ODIN_INSPECTOR
         private bool IsCollisionWithOtherInstaller 
-            => FindObjectsOfType<Installer>().Where(i => i != this).Any(i => i.order == this.order);
+            => this.IsPrefab() == false && FindObjectsOfType<Installer>().Where(i => i != this).Any(i => i.order == this.order);
+        
+        private bool IsPrefab() => this.gameObject.scene.name == null;
 #endif
         
         [Space]
@@ -48,12 +49,7 @@
         [OnValueChanged(nameof(OnValueChangedLateUpdate))]
 #endif
         public LateSystemPair[] lateUpdateSystems;
-        
-#if UNITY_EDITOR && ODIN_INSPECTOR
-        [PropertyOrder(-1)]
-#endif
-        public List<Task> tasks = new List<Task>();
-        
+
         private SystemsGroup group;
 
         private void OnValueChangedUpdate() {
@@ -90,14 +86,6 @@
             this.AddSystems(this.fixedUpdateSystems);
             this.AddSystems(this.lateUpdateSystems);
             
-            foreach (var task in this.tasks) {
-                var childGroup = World.Default.CreateSystemsGroup(task.GetTaskCondition());
-                foreach (var action in task.actions) {
-                    childGroup.AddSystem(action.ActionSystem);
-                }
-                this.group.AddChildGroup(childGroup);
-            }
-            
             World.Default.AddSystemsGroup(this.order, this.group);
         }
 
@@ -117,7 +105,15 @@
                 if (system != null) {
                     this.group.AddSystem(system, pair.Enabled);
                 }
+                else {
+                    this.SystemNullError();
+                }
             }
+        }
+
+        private void SystemNullError() {
+            var go = this.gameObject;
+            Debug.LogError($"[MORPEH] System null in installer {go.name} on scene {go.scene.name}", go);
         }
 
         private void RemoveSystems<T>(BasePair<T>[] pairs) where T : class, ISystem {
@@ -167,6 +163,7 @@
 #if UNITY_EDITOR && ODIN_INSPECTOR
             [HorizontalGroup("Pair")]
             [HideLabel]
+            [Required]
 #endif
             [CanBeNull]
             private T system;

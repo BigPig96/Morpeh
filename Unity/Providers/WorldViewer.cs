@@ -57,14 +57,13 @@ namespace Morpeh {
                 get {
                     if (this.entity != null) {
                         this.componentViews.Clear();
-                        for (int i = 0, length = this.entity.componentsDoubleCapacity; i < length; i+=2) {
-                            if (this.entity.components[i] == -1) {
-                                continue;
-                            }
+                        foreach (var slotIndex in this.entity.componentsIds) {
+                            var slot = this.entity.componentsIds.slots[slotIndex];
+                            var data = this.entity.componentsIds.data[slotIndex];
                             var view = new ComponentView {
-                                debugInfo = CommonCacheTypeIdentifier.editorTypeAssociation[this.entity.components[i]],
-                                id        = this.entity.components[i + 1],
-                                world     = this.entity.World
+                                debugInfo = CommonCacheTypeIdentifier.editorTypeAssociation[slot.key],
+                                id        = data,
+                                world     = this.entity.world
                             };
                             this.componentViews.Add(view);
                         }

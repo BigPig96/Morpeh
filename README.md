@@ -2,24 +2,52 @@
 <img align="right" width="260px" height="260px" src="Unity/Utils/Editor/Resources/logo.png">
 
 ECS Framework for Unity Game Engine.  
-
+   
+Adapted for the development mobile games like:  
+* Hyper Casual.  
+* Idlers.  
+* Arcades.  
+* Other genres.  
+  
+Features:
 * Simple Syntax.
 * Simple Integration with Unity Engine.
 * No code generation and any C# Reflection in Runtime.
 * Structure-based and Cache-friendly.
 * Reactive and Fast Filters.
-* Built-in Events and Reactive Variables.
+* Built-in Events and Reactive Variables aka Globals.
 * Single-threaded.
 
 ## Table of Contents
 
+* [How To Install](#how-to-install)
 * [Introduction](#introduction)
   * [Base concept of ECS pattern](#base-concept-of-ecs-pattern)
   * [Getting Start](#getting-start)
   * [Advanced](#advanced)
-* [How To Install](#how-to-install)
 * [License](#license)
 * [Contacts](#contacts)
+
+
+## How To Install
+
+<details>
+    <summary>Open Package Manager and add Morpeh URL.  </summary>
+    
+![installation_step1.png](Gifs~/installation_step1.png)  
+![installation_step2.png](Gifs~/installation_step2.png)  
+</details>
+  
+* Master: https://github.com/X-Crew/Morpeh.git  
+* Dev:  https://github.com/X-Crew/Morpeh.git#develop  
+* Tag:  https://github.com/X-Crew/Morpeh.git#2020.7.1  
+
+<details>
+    <summary>You can update Morpeh by Discover Window. Select Help/Morpeh Discover menu.   </summary>
+    
+![update_morpeh.png](Gifs~/update_morpeh.png)  
+</details>
+
 
 ## Introduction
 ### Base concept of ECS pattern
@@ -96,7 +124,7 @@ var filter = newWorld.Filter.With<HealthComponent>();
 
 ---
 
-### Getting Start
+### Getting Started
 > **IMPORTANT**  
 > For a better user experience, we strongly recommend having Odin Inspector and FindReferences2 in the project.  
 > All GIFs are hidden under spoilers.
@@ -204,7 +232,7 @@ public sealed class HealthSystem : UpdateSystem {
 }
 ```
 > Don't forget about `ref` operator.  
-> Components are struct and if you wanna change them directly, then you must use reference operator.
+> Components are struct and if you want to change them directly, then you must use reference operator.
 
 For high performance, you can do cached sampling.  
 No need to do GetComponent from entity every time.  
@@ -291,44 +319,71 @@ Now press the play button, and you will see Debug.Log with healthPoints.
 Nice!  
 
 ### Advanced
-TODO
+
+#### Event system. Singletons and Globals Assets.  
+There is an execution order in the ECS pattern, so we cannot use standard delegates or events, they will break it.  
+
+ECS uses the concept of a deferred call, or the events are data.  
+In the simplest cases, events are used as entities with empty components called tags or markers.  
+That is, in order to notify someone about the event, you need to create an entity and add an empty component to it.  
+Another system creates a filter for this component, and if there are entities, we believe that the event is published.  
+
+In general, this is a working approach, but there are several problems.  
+Firstly, these tags overwhelm the project with their types, if you wrote a message bus, then you understand what I mean.  
+Each event in the game has its own unique type and there is not enough imagination to give everyone a name.  
+Secondly, it’s uncomfortable working with these events from MonoBehaviours, UI, Visual Scripting Frameworks (Playmaker, Bolt, etc.)  
+
+As a solution to this problem, global assets were created.  
+
+**Singleton** is a simple ScriptableObject that is associated with one specific entity.  
+It is usually used to add dynamic components to one entity without using filters.  
+
+**GlobalEvent** is a Singleton, which has the functionality of publishing events to the world by adding a tag to its entity.  
+It has 4 main methods for working with it:  
+1) Publish (arg) - publish within the frame, and all downstream systems will see this.  
+2) NextFrame (arg) - publish in the next frame, all systems will see this.  
+3) IsPublished - did anyone publish this event  
+4) BatchedChanges - a data stack where publication arguments are added.  
+
+**GlobalVariable** is a GlobalEvent that stores the start value and the last value after the changes.  
+It also has the functionality of saving and loading data from PlayerPrefs.  
+
+You can create globals by context menu `Create/ECS/Globals/` in Project Window.  
+You can declare globals in any systems, components and scripts and set it by Inspector Window, for example:  
+```c#  
+public sealed class HealthSystem : UpdateSystem {
+    public GlobalEvent myEvent;
+    ...
+}
+```
+
+And check their publication with:  
+```c#  
+public sealed class HealthSystem : UpdateSystem {
+    public GlobalEvent myEvent;
+    ...
+    public override void OnUpdate(float deltaTime) {
+        if (myEvent.IsPublished) {
+            Debug.Log("Event is published");
+        }
+    }
+}
+```
+
+And there is also a variation with checking for null:  
+```c#  
+public sealed class HealthSystem : UpdateSystem {
+    public GlobalEvent myEvent;
+    ...
+    public override void OnUpdate(float deltaTime) {
+        if (myEvent) {
+            Debug.Log("Event is not null and is published");
+        }
+    }
+}
+```
 
 ---
-
-## How To Install
-
-### Unity Package Installation
-- Add to your project manifiest by path `UnityProject/Packages/manifiest.json` these lines:
-```json
-{
-  "dependencies": {
-  },
-  "scopedRegistries": [
-    {
-      "name": "XCrew",
-      "url": "http://xcrew.dev",
-      "scopes": [
-        "com.xcrew"
-      ]
-    }
-  ]
-}
-```
-- Open window Package Manager in Unity and install Morpeh
-
-### Git Installation
-Add to your project manifiest by path `UnityProject/Packages/manifiest.json` next line:
-```json
-{
-  "dependencies": {
-     "com.xcrew.morpeh": "https://github.com/X-Crew/Morpeh.git"
-  }
-}
-```
-
-### Manual Installation 
-- Go to [Releases](https://github.com/X-Crew/Morpeh/releases) and download latest package.
-- Import Morpeh.
 
 ## License
 

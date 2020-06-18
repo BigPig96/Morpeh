@@ -5,6 +5,8 @@
 
     [CreateAssetMenu(menuName = "ECS/Globals/Custom/Tests/" + nameof(TestClassCustomVariable))]
     public class TestClassCustomVariable : BaseGlobalVariable<DummyClass> {
+        public override DataWrapper Wrapper { get; set; }
+
         protected override DummyClass Load(string serializedData) {
             if (!string.IsNullOrEmpty(serializedData)) {
                 if (this.value != null) {
@@ -17,6 +19,8 @@
             return this.value;
         }
         protected override string Save() => JsonUtility.ToJson(this.value);
+        
+        public override string LastToString() => this.BatchedChanges.Peek().ToString();
     }
 
     [Serializable]
