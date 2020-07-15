@@ -32,7 +32,7 @@ namespace Morpeh.Globals {
 #if UNITY_EDITOR
         public abstract Type GetValueType();
 #endif
-        internal override void OnEnable() {
+        protected override void OnEnable() {
             base.OnEnable();
 #if UNITY_EDITOR
             if (Application.isPlaying) {

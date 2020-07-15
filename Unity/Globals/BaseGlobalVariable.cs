@@ -95,7 +95,7 @@
             }
         }
 
-        internal override void OnEnable() {
+        protected override void OnEnable() {
             base.OnEnable();
             this.__internalKey = null;
             UnityRuntimeHelper.onApplicationFocusLost += this.SaveData;
