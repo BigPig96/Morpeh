@@ -775,8 +775,10 @@ namespace Morpeh {
             this.newInitializers.Add(initializer);
         }
 
-        public void RemoveInitializer<T>(T initializer) where T : class, IInitializer
-            => this.newInitializers.Remove(initializer);
+        public void RemoveInitializer<T>(T initializer) where T : class, IInitializer {
+            this.newInitializers.Remove(initializer);
+            this.initializers.Remove(initializer);
+        }
 
         public bool AddSystem<T>(T system, bool enabled = true) where T : class, ISystem {
             var collection         = this.systems;
