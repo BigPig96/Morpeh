@@ -594,58 +594,56 @@ namespace Morpeh {
             DisposeSystems(this.disabledLateSystems);
             this.disabledLateSystems = null;
 
-            if (this.newInitializers.Count > 0) {
-                foreach (var initializer in this.newInitializers) {
+            foreach (var initializer in this.newInitializers) {
 #if UNITY_EDITOR
-                    try {
+                try {
 #endif
-                        initializer.Dispose();
+                    initializer.Dispose();
 #if UNITY_EDITOR
-                    }
-                    catch (Exception e) {
-                        Debug.LogError($"[MORPEH] Can not dispose new initializer {initializer.GetType()}");
-                        Debug.LogException(e);
-                    }
-#endif
                 }
-
-                this.newInitializers.Clear();
-                this.newInitializers = null;
-
-                foreach (var initializer in this.initializers) {
-#if UNITY_EDITOR
-                    try {
-#endif
-                        initializer.Dispose();
-#if UNITY_EDITOR
-                    }
-                    catch (Exception e) {
-                        Debug.LogError($"[MORPEH] Can not dispose initializer {initializer.GetType()}");
-                        Debug.LogException(e);
-                    }
-#endif
+                catch (Exception e) {
+                    Debug.LogError($"[MORPEH] Can not dispose new initializer {initializer.GetType()}");
+                    Debug.LogException(e);
                 }
-
-                this.initializers.Clear();
-                this.initializers = null;
-
-                foreach (var disposable in this.disposables) {
-#if UNITY_EDITOR
-                    try {
 #endif
-                        disposable.Dispose();
-#if UNITY_EDITOR
-                    }
-                    catch (Exception e) {
-                        Debug.LogError($"[MORPEH] Can not dispose system group disposable {disposable.GetType()}");
-                        Debug.LogException(e);
-                    }
-#endif
-                }
-
-                this.disposables.Clear();
-                this.disposables = null;
             }
+
+            this.newInitializers.Clear();
+            this.newInitializers = null;
+
+            foreach (var initializer in this.initializers) {
+#if UNITY_EDITOR
+                try {
+#endif
+                    initializer.Dispose();
+#if UNITY_EDITOR
+                }
+                catch (Exception e) {
+                    Debug.LogError($"[MORPEH] Can not dispose initializer {initializer.GetType()}");
+                    Debug.LogException(e);
+                }
+#endif
+            }
+
+            this.initializers.Clear();
+            this.initializers = null;
+
+            foreach (var disposable in this.disposables) {
+#if UNITY_EDITOR
+                try {
+#endif
+                    disposable.Dispose();
+#if UNITY_EDITOR
+                }
+                catch (Exception e) {
+                    Debug.LogError($"[MORPEH] Can not dispose system group disposable {disposable.GetType()}");
+                    Debug.LogException(e);
+                }
+#endif
+            }
+
+            this.disposables.Clear();
+            this.disposables = null;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
