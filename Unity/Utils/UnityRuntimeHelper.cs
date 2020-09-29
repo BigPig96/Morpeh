@@ -1,5 +1,6 @@
 namespace Morpeh {
     using System;
+    using Collections;
     using UnityEngine;
 #if UNITY_EDITOR
     using UnityEditor;
@@ -12,6 +13,7 @@ namespace Morpeh {
     using Globals.ECS;
 #endif
     using Unity.IL2CPP.CompilerServices;
+    using Utils;
 
     [Il2CppSetOption(Option.NullChecks, false)]
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
@@ -21,24 +23,36 @@ namespace Morpeh {
 #else
     internal class UnityRuntimeHelper : MonoBehaviour {
 #endif
-        internal static Action OnApplicationFocusLost = () => { };
+        internal static Action             onApplicationFocusLost = () => { };
+        internal static UnityRuntimeHelper instance;
 #if UNITY_EDITOR && ODIN_INSPECTOR
         [OdinSerialize]
-        private List<World> worldsSerialized = null;
+        private FastList<World> worldsSerialized = null;
         [OdinSerialize]
-        private List<string> types = null;
-        private bool hotReloaded = false;
+        private FastList<string> types = null;
 #endif
 
 #if UNITY_EDITOR
         private void OnEnable() {
-            EditorApplication.playModeStateChanged += OnEditorApplicationOnplayModeStateChanged;
+            if (instance == null) {
+                instance                               =  this;
+                EditorApplication.playModeStateChanged += this.OnEditorApplicationOnplayModeStateChanged;
+            }
+            else {
+                Destroy(this);
+            }
+        }
+
+        private void OnDisable() {
+            if (instance == this) {
+                instance = null;
+            }
         }
 
         private void OnEditorApplicationOnplayModeStateChanged(PlayModeStateChange state) {
             if (state == PlayModeStateChange.EnteredEditMode) {
-                for (var i = World.worlds.Count - 1; i >= 0; i--) {
-                    var world = World.worlds[i];
+                for (var i = World.worlds.length - 1; i >= 0; i--) {
+                    var world = World.worlds.data[i];
                     world?.Dispose();
                 }
 
@@ -54,37 +68,27 @@ namespace Morpeh {
         }
 #endif
 
-        private void Update() {
-            World.GlobalUpdate(Time.deltaTime);
-#if UNITY_EDITOR && ODIN_INSPECTOR
-            if (this.hotReloaded) {
-                foreach (var world in World.worlds) {
-                    for (var index = 0; index < world.entitiesCount; index++) {
-                        var entity = world.entities[index];
-                        world.Filter.entities.Add(entity.internalID);
-                    }
-                }
+        private void Update() => WorldExtensions.GlobalUpdate(Time.deltaTime);
 
-                this.hotReloaded = false;
-            }
-#endif
-        }
-
-        private void FixedUpdate() => World.GlobalFixedUpdate(Time.fixedDeltaTime);
-        private void LateUpdate()  => World.GlobalLateUpdate(Time.deltaTime);
+        private void FixedUpdate() => WorldExtensions.GlobalFixedUpdate(Time.fixedDeltaTime);
+        private void LateUpdate()  => WorldExtensions.GlobalLateUpdate(Time.deltaTime);
 
         internal void OnApplicationFocus(bool hasFocus) {
             if (!hasFocus) {
-                OnApplicationFocusLost.Invoke();
+                onApplicationFocusLost.Invoke();
                 GC.Collect();
             }
+        }
+
+        internal void OnApplicationQuit() {
+            onApplicationFocusLost.Invoke();
         }
 
 #if UNITY_EDITOR && ODIN_INSPECTOR
         protected override void OnBeforeSerialize() {
             this.worldsSerialized = World.worlds;
             if (this.types == null) {
-                this.types = new List<string>();
+                this.types = new FastList<string>();
             }
 
             this.types.Clear();
@@ -110,13 +114,26 @@ namespace Morpeh {
                 }
 
                 foreach (var world in this.worldsSerialized) {
-                    world?.Ctor();
+                    if (world != null && world.entities != null) {
+                        for (int i = 0, length = world.entities.Length; i < length; i++) {
+                            var e = world.entities[i];
+                            if (e == null) {
+                                continue;
+                            }
+
+                            if (e.componentsIds == null) {
+                                world.entities[i] = null;
+                            }
+                        }
+
+                        world.Ctor();
+                    }
                 }
 
                 World.worlds = this.worldsSerialized;
-                this.hotReloaded = true;
             }
         }
 #endif
     }
 }
+
