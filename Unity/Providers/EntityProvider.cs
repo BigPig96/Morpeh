@@ -15,7 +15,7 @@ namespace Morpeh {
         [ShowInInspector]
         [ReadOnly]
 #endif
-        private int entityID = -1;
+        protected int internalEntityID = -1;
 
         [CanBeNull]
         private Entity InternalEntity {
@@ -29,13 +29,13 @@ namespace Morpeh {
                 }
 
                 if (this.cachedEntity == null) {
-                    if (World.Default != null && this.entityID >= 0 && World.Default.entitiesLength > this.entityID) {
-                        this.cachedEntity = World.Default.entities[this.entityID];
+                    if (World.Default != null && this.internalEntityID >= 0 && World.Default.entitiesLength > this.internalEntityID) {
+                        this.cachedEntity = World.Default.entities[this.internalEntityID];
                     }
                 }
-                else if (this.cachedEntity != null && this.cachedEntity.IsDisposed()) {
+                else if (this.cachedEntity != null && this.cachedEntity.isDisposed) {
                     this.cachedEntity = null;
-                    this.entityID     = -1;
+                    this.internalEntityID     = -1;
                 }
 
                 return this.cachedEntity;
@@ -45,7 +45,7 @@ namespace Morpeh {
         private Entity cachedEntity;
 
         [CanBeNull]
-        public IEntity Entity => this.InternalEntity;
+        public Entity Entity => this.InternalEntity;
 
         private protected virtual void OnEnable() {
 #if UNITY_EDITOR && ODIN_INSPECTOR
@@ -55,23 +55,23 @@ namespace Morpeh {
                 return;
             }
 
-            if (this.entityID < 0) {
+            if (this.internalEntityID < 0) {
                 var others = this.GetComponents<EntityProvider>();
                 foreach (var entityProvider in others) {
-                    if (entityProvider.entityID >= 0) {
-                        this.entityID     = entityProvider.entityID;
+                    if (entityProvider.internalEntityID >= 0) {
+                        this.internalEntityID     = entityProvider.internalEntityID;
                         this.cachedEntity = entityProvider.cachedEntity;
                         break;
                     }
                 }
             }
 
-            if (this.InternalEntity == null || this.entityID < 0) {
+            if (this.InternalEntity == null || this.internalEntityID < 0) {
                 var others = this.GetComponents<EntityProvider>();
-                this.cachedEntity = World.Default.CreateEntityInternal(out this.entityID);
+                this.cachedEntity = World.Default.CreateEntity(out this.internalEntityID);
                 foreach (var entityProvider in others) {
                     if (entityProvider.enabled) {
-                        entityProvider.entityID     = this.entityID;
+                        entityProvider.internalEntityID     = this.internalEntityID;
                         entityProvider.cachedEntity = this.cachedEntity;
                     }
                 }
@@ -82,9 +82,6 @@ namespace Morpeh {
         }
 
         protected virtual void OnDisable() {
-            this.entityID = -1;
-            this.cachedEntity = null;
-            
             var others = this.GetComponents<EntityProvider>();
             foreach (var entityProvider in others) {
                 entityProvider.CheckEntityIsAlive();
@@ -92,8 +89,8 @@ namespace Morpeh {
         }
 
         private void CheckEntityIsAlive() {
-            if (this.InternalEntity == null || this.InternalEntity.IsDisposed()) {
-                this.entityID = -1;
+            if (this.InternalEntity == null || this.InternalEntity.isDisposed) {
+                this.internalEntityID = -1;
             }
         }
 
@@ -106,11 +103,17 @@ namespace Morpeh {
         }
 
 #if UNITY_EDITOR && ODIN_INSPECTOR
-        private bool IsNotEntityProvider => this.GetType() != typeof(EntityProvider);
+        private bool IsNotEntityProvider {
+            get {
+                var type = this.GetType();
+                return type != typeof(EntityProvider) && type != typeof(UniversalProvider);
+            }
+        }
 
         [HideIf("$" + nameof(IsNotEntityProvider))]
         [ShowInInspector]
-        private Editor.EntityViewer entityViewer = new Editor.EntityViewer();
+        [PropertyOrder(100)]
+        private Editor.EntityViewerWithHeader entityViewer = new Editor.EntityViewerWithHeader();
 #endif
     }
 }

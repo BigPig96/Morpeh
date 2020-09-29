@@ -1,5 +1,6 @@
 namespace Morpeh {
     using System;
+    using Collections;
     using UnityEngine;
 #if UNITY_EDITOR
     using UnityEditor;
@@ -67,10 +68,17 @@ namespace Morpeh {
         }
 #endif
 
-        private void Update() => World.GlobalUpdate(Time.deltaTime);
+        private void Update() => WorldExtensions.GlobalUpdate(Time.deltaTime);
 
-        private void FixedUpdate() => World.GlobalFixedUpdate(Time.fixedDeltaTime);
-        private void LateUpdate()  => World.GlobalLateUpdate(Time.deltaTime);
+        private void FixedUpdate() => WorldExtensions.GlobalFixedUpdate(Time.fixedDeltaTime);
+        private void LateUpdate()  => WorldExtensions.GlobalLateUpdate(Time.deltaTime);
+        
+        internal void OnApplicationPause(bool pauseStatus) {
+            if (pauseStatus) {
+                onApplicationFocusLost.Invoke();
+                GC.Collect();
+            }
+        }   
 
         internal void OnApplicationFocus(bool hasFocus) {
             if (!hasFocus) {
@@ -91,7 +99,7 @@ namespace Morpeh {
             }
 
             this.types.Clear();
-            foreach (var info in CommonCacheTypeIdentifier.editorTypeAssociation.Values) {
+            foreach (var info in CommonTypeIdentifier.intTypeAssociation.Values) {
                 this.types.Add(info.type.AssemblyQualifiedName);
             }
         }
@@ -102,14 +110,15 @@ namespace Morpeh {
                 foreach (var t in this.types) {
                     var genType = Type.GetType(t);
                     if (genType != null) {
-                        var openGeneric   = typeof(CacheTypeIdentifier<>);
+                        var openGeneric   = typeof(TypeIdentifier<>);
                         var closedGeneric = openGeneric.MakeGenericType(genType);
                         var infoFI        = closedGeneric.GetField("info", BindingFlags.Static | BindingFlags.NonPublic);
                         infoFI.GetValue(null);
                     }
-                    else {
-                        CommonCacheTypeIdentifier.GetID();
-                    }
+                    //todo idk how it is works
+                    // else {
+                    //     CommonCacheTypeIdentifier.GetID();
+                    // }
                 }
 
                 foreach (var world in this.worldsSerialized) {

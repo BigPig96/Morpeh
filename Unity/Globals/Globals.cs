@@ -28,7 +28,7 @@ namespace Morpeh.Globals {
             public int worldId;
             
             internal override void Awake(World world) {
-                this.worldId = world.id;
+                this.worldId = world.identifier;
 
                 if (initialized.ContainsKey(this.worldId)) {
                     initialized[this.worldId] = true;
@@ -48,7 +48,6 @@ namespace Morpeh.Globals {
                     ref var evnt = ref entity.GetComponent<GlobalEventComponent<T>>(out _);
                     evnt.Action?.Invoke(evnt.Data);
                     evnt.Data.Clear();
-                    evnt.Global.isPublished = false;
                     entity.RemoveComponent<GlobalEventPublished>();
                 }
                 foreach (var entity in this.filterPublishedNextFrame) {
@@ -56,8 +55,6 @@ namespace Morpeh.Globals {
                     evnt.Action?.Invoke(evnt.Data);
                 }
                 foreach (var entity in this.filterNextFrame) {
-                    ref var evnt = ref entity.GetComponent<GlobalEventComponent<T>>(out _);
-                    evnt.Global.isPublished = true;
                     entity.SetComponent(new GlobalEventPublished ());
                     entity.RemoveComponent<GlobalEventNextFrame>();
                 }
@@ -71,8 +68,6 @@ namespace Morpeh.Globals {
 
         [Serializable]
         public struct GlobalEventComponent<TData> : IComponent {
-            public BaseGlobal Global;
-
             public Action<IEnumerable<TData>> Action;
             public Stack<TData>               Data;
         }
@@ -94,7 +89,7 @@ namespace Morpeh.Globals {
             public int worldId;
 
             public void OnAwake() {
-                this.worldId = this.World.id;
+                this.worldId = this.World.identifier;
             }
 
             public void OnUpdate(float deltaTime) {
@@ -118,11 +113,11 @@ namespace Morpeh.Globals {
 }
 
 namespace Morpeh {
-    partial class World {
-        partial void InitializeGlobals() {
-            var sg = this.CreateSystemsGroup();
+    partial class WorldExtensions {
+        static partial void InitializeGlobals(this World world) {
+            var sg = world.CreateSystemsGroup();
             sg.AddSystem(new Morpeh.Globals.ECS.ProcessEventsSystem());
-            this.AddSystemsGroup(99999, sg);
+            world.AddSystemsGroup(99999, sg);
         }
     }
 }

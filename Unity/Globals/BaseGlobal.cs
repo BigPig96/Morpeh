@@ -14,9 +14,7 @@ namespace Morpeh.Globals {
     [Il2CppSetOption(Option.NullChecks, false)]
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
     [Il2CppSetOption(Option.DivideByZeroChecks, false)]
-    public abstract class BaseGlobal : Singleton, IDisposable {
-        internal bool isPublished;
-
+    public abstract class BaseGlobal : BaseSingleton, IDisposable {
         public bool IsPublished {
             get {
 #if UNITY_EDITOR
@@ -24,28 +22,21 @@ namespace Morpeh.Globals {
                     return default;
                 }
                 this.CheckIsInitialized();
+                return this.InternalEntity.Has<GlobalEventPublished>();
+#else
+                return this.internalEntity.Has<GlobalEventPublished>();
 #endif
-                return this.isPublished;
             }
         }
         
 #if UNITY_EDITOR
         public abstract Type GetValueType();
 #endif
-        internal override void OnEnable() {
-            base.OnEnable();
-#if UNITY_EDITOR
-            if (Application.isPlaying) {
-                this.isPublished = this.InternalEntity.Has<GlobalEventPublished>();
-            }
-#endif
-        }
-
         public abstract string LastToString();
 
         public static implicit operator bool(BaseGlobal exists) => exists != null && exists.IsPublished;
 
-        private protected class Unsubscriber : IDisposable {
+        protected class Unsubscriber : IDisposable {
             private readonly Action unsubscribe;
             public Unsubscriber(Action unsubscribe) => this.unsubscribe = unsubscribe;
             public void Dispose() => this.unsubscribe();

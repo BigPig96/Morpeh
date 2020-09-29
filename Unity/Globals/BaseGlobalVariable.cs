@@ -5,7 +5,6 @@
     using UnityEngine;
 #if UNITY_EDITOR && ODIN_INSPECTOR
     using Sirenix.OdinInspector;
-
 #endif
 
     public abstract class DataWrapper {
@@ -70,9 +69,14 @@
             set => this.SetValue(value);
         }
 
-        private void SetValue(TData newValue) {
+        public void SetValue(TData newValue) {
             this.value = newValue;
             this.OnChange(newValue);
+        }
+        
+        public void SetValueNextFrame(TData newValue) {
+            this.value = newValue;
+            this.OnChangeNextFrame(newValue);
         }
         
         private void OnChange() {
@@ -85,17 +89,21 @@
                 this.Publish(newValue);
             }
         }
-
-        protected abstract TData  Load([NotNull] string serializedData);
-        protected abstract string Save();
-
-        public virtual void Reset() {
-            if (!string.IsNullOrEmpty(this.defaultSerializedValue)) {
-                this.value = this.Load(this.defaultSerializedValue);
+        
+        private void OnChangeNextFrame(TData newValue) {
+            if (Application.isPlaying) {
+                this.CheckIsInitialized();
+                this.NextFrame(newValue);
             }
         }
 
-        internal override void OnEnable() {
+        public virtual void Reset() {
+            if (!string.IsNullOrEmpty(this.defaultSerializedValue)) {
+                this.value = this.Deserialize(this.defaultSerializedValue);
+            }
+        }
+
+        protected override void OnEnable() {
             base.OnEnable();
             this.__internalKey = null;
             UnityRuntimeHelper.onApplicationFocusLost += this.SaveData;
@@ -107,7 +115,7 @@
             this.LoadData();
         }
 #if UNITY_EDITOR
-        internal override void OnEditorApplicationOnplayModeStateChanged(PlayModeStateChange state) {
+        protected override void OnEditorApplicationOnplayModeStateChanged(PlayModeStateChange state) {
             base.OnEditorApplicationOnplayModeStateChanged(state);
             if (state == PlayModeStateChange.EnteredEditMode) {
                 this.SaveData();
@@ -146,32 +154,50 @@
 
         private void LoadData() {
 #if UNITY_EDITOR
-            if (!EditorApplication.isPlayingOrWillChangePlaymode) {
-                return;
+            try {
+#endif
+    #if UNITY_EDITOR
+                if (!EditorApplication.isPlayingOrWillChangePlaymode) {
+                    return;
+                }
+    #endif
+                
+                if (this.isLoaded) {
+                    return;
+                }
+
+                this.defaultSerializedValue = this.Serialize(this.value);
+                this.isLoaded = true;
+                
+                if (!this.AutoSave) {
+                    return;
+                }
+                if (!PlayerPrefs.HasKey(this.Key)) {
+                    return;
+                }
+
+                this.value = this.Deserialize(PlayerPrefs.GetString(this.Key));
+#if UNITY_EDITOR
+            }
+            catch (Exception e) {
+                Debug.LogException(e);
             }
 #endif
-            
-            if (this.isLoaded) {
-                return;
-            }
-
-            this.defaultSerializedValue = this.Save();
-            this.isLoaded = true;
-            
-            if (!this.AutoSave) {
-                return;
-            }
-            if (!PlayerPrefs.HasKey(this.Key)) {
-                return;
-            }
-
-            this.value = this.Load(PlayerPrefs.GetString(this.Key));
         }
 
         internal void SaveData() {
-            if (this.AutoSave) {
-                PlayerPrefs.SetString(this.Key, this.Save());
+#if UNITY_EDITOR
+            try {
+#endif
+                if (this.AutoSave) {
+                    PlayerPrefs.SetString(this.Key, this.Serialize(this.value));
+                }
+#if UNITY_EDITOR
             }
+            catch (Exception e) {
+                Debug.LogException(e);
+            }
+#endif
         }
 
         #region EDITOR
