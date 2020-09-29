@@ -13,61 +13,70 @@
     [Il2CppSetOption(Option.NullChecks, false)]
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
     [Il2CppSetOption(Option.DivideByZeroChecks, false)]
-    //TODO refactor for Reorder in Runtime
-    public sealed class Installer : WorldViewer {
+    [AddComponentMenu("ECS/" + nameof(Installer))]
+    public sealed class Installer : BaseInstaller {
 #if UNITY_EDITOR && ODIN_INSPECTOR
         [Required]
-        [InfoBox("Order collision with other installer!", InfoMessageType.Error, "isCollisionWithOtherInstaller")]
+        [InfoBox("Order collision with other installer!", InfoMessageType.Error, nameof(IsCollisionWithOtherInstaller))]
         [PropertyOrder(-5)]
 #endif
         public int order;
         
 #if UNITY_EDITOR && ODIN_INSPECTOR
-        private bool isCollisionWithOtherInstaller 
-            => FindObjectsOfType<Installer>().Where(i => i != this).Any(i => i.order == this.order);
+        private bool IsCollisionWithOtherInstaller 
+            => this.IsPrefab() == false && FindObjectsOfType<Installer>().Where(i => i != this).Any(i => i.order == this.order);
+        
+        private bool IsPrefab() => this.gameObject.scene.name == null;
 #endif
         
         [Space]
 #if UNITY_EDITOR && ODIN_INSPECTOR
-        [PropertyOrder(-4)]
+        [PropertyOrder(-5)]
 #endif
         public Initializer[] initializers;
 #if UNITY_EDITOR && ODIN_INSPECTOR
-        [PropertyOrder(-3)]
+        [PropertyOrder(-4)]
         [OnValueChanged(nameof(OnValueChangedUpdate))]
 #endif
         public UpdateSystemPair[] updateSystems;
 #if UNITY_EDITOR && ODIN_INSPECTOR
-        [PropertyOrder(-2)]
+        [PropertyOrder(-3)]
         [OnValueChanged(nameof(OnValueChangedFixedUpdate))]
 #endif
         public FixedSystemPair[] fixedUpdateSystems;
 #if UNITY_EDITOR && ODIN_INSPECTOR
-        [PropertyOrder(-1)]
+        [PropertyOrder(-2)]
         [OnValueChanged(nameof(OnValueChangedLateUpdate))]
 #endif
         public LateSystemPair[] lateUpdateSystems;
-        
+
         private SystemsGroup group;
 
         private void OnValueChangedUpdate() {
-            this.RemoveSystems(this.updateSystems);
-            this.AddSystems(this.updateSystems);
+            if (Application.isPlaying) {
+                this.RemoveSystems(this.updateSystems);
+                this.AddSystems(this.updateSystems);
+            }
         }
         
         private void OnValueChangedFixedUpdate() {
-            this.RemoveSystems(this.fixedUpdateSystems);
-            this.AddSystems(this.fixedUpdateSystems);
+            if (Application.isPlaying) {
+                this.RemoveSystems(this.fixedUpdateSystems);
+                this.AddSystems(this.fixedUpdateSystems);
+            }
         }
         
         private void OnValueChangedLateUpdate() {
-            this.RemoveSystems(this.lateUpdateSystems);
-            this.AddSystems(this.lateUpdateSystems);
+            if (Application.isPlaying) {
+                this.RemoveSystems(this.lateUpdateSystems);
+                this.AddSystems(this.lateUpdateSystems);
+            }
         }
         
 
-        private void OnEnable() {
+        protected override void OnEnable() {
             this.group = World.Default.CreateSystemsGroup();
+            
             for (int i = 0, length = this.initializers.Length; i < length; i++) {
                 var initializer = this.initializers[i];
                 this.group.AddInitializer(initializer);
@@ -80,7 +89,7 @@
             World.Default.AddSystemsGroup(this.order, this.group);
         }
 
-        private void OnDisable() {
+        protected override void OnDisable() {
             this.RemoveSystems(this.updateSystems);
             this.RemoveSystems(this.fixedUpdateSystems);
             this.RemoveSystems(this.lateUpdateSystems);
@@ -96,7 +105,15 @@
                 if (system != null) {
                     this.group.AddSystem(system, pair.Enabled);
                 }
+                else {
+                    this.SystemNullError();
+                }
             }
+        }
+
+        private void SystemNullError() {
+            var go = this.gameObject;
+            Debug.LogError($"[MORPEH] System null in installer {go.name} on scene {go.scene.name}", go);
         }
 
         private void RemoveSystems<T>(BasePair<T>[] pairs) where T : class, ISystem {
@@ -107,13 +124,7 @@
                 }
             }
         }
-
-#if UNITY_EDITOR && ODIN_INSPECTOR
-        [OnInspectorGUI]
-        private void OnEditoGUI() {
-            this.gameObject.transform.hideFlags = HideFlags.HideInInspector;
-        }
-#endif
+        
 #if UNITY_EDITOR
         [MenuItem("GameObject/ECS/", true, 10)]
         private static bool OrderECS() => true;
@@ -152,6 +163,7 @@
 #if UNITY_EDITOR && ODIN_INSPECTOR
             [HorizontalGroup("Pair")]
             [HideLabel]
+            [Required]
 #endif
             [CanBeNull]
             private T system;
