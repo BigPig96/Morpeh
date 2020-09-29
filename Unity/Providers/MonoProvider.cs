@@ -35,9 +35,13 @@
             }
         }
         
+        public ref T GetSerializedData() => ref this.serializedData;
+
         public ref T GetData() {
             if (this.Entity != null) {
-                return ref this.Entity.GetComponent<T>();
+                if (this.Entity.Has<T>()) {
+                    return ref this.Entity.GetComponent<T>();
+                }
             }
 
             return ref this.serializedData;
@@ -51,17 +55,28 @@
             existOnEntity = false;
             return ref this.serializedData;
         }
+        
+        protected virtual void OnValidate() {
+            if (this.serializedData is IValidatable validatable) {
+                validatable.OnValidate();
+                this.serializedData = (T)validatable;
+            }
+            if (this.serializedData is IValidatableWithGameObject validatableWithGameObject) {
+                validatableWithGameObject.OnValidate(this.gameObject);
+                this.serializedData = (T)validatableWithGameObject;
+            }
+        }
 
         protected sealed override void PreInitialize() {
             var ent = this.Entity;
-            if (ent != null && !ent.IsDisposed()) {
+            if (ent != null && !ent.isDisposed) {
                 ent.SetComponent(this.serializedData);
             }
         }
 
         protected override void OnDisable() {
             var ent = this.Entity;
-            if (ent != null && !ent.IsDisposed()) {
+            if (ent.IsNullOrDisposed() == false) {
                 ent.RemoveComponent<T>();
             }
             base.OnDisable();

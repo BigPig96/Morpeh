@@ -7,21 +7,21 @@
     using Sirenix.OdinInspector;
 #endif
 
-    public interface IDataWrapper {
-        
+    public abstract class DataWrapper {
+        public abstract override string ToString();
     }
-    
+
     public interface IDataVariable {
-        IDataWrapper Wrapper { get; set; }
+        DataWrapper Wrapper { get; set; }
     }
-    
+
     public abstract class BaseGlobalVariable<TData> : BaseGlobalEvent<TData>, IDataVariable {
         [Space]
         [Header("Runtime Data")]
         [SerializeField]
 #if UNITY_EDITOR && ODIN_INSPECTOR
         [PropertyOrder(10)]
-        [OnValueChanged("OnChange")]
+        [OnValueChanged(nameof(OnChange))]
         [DelayedProperty]
         [HideLabel]
 #endif
@@ -62,57 +62,60 @@
         private bool HasPlayerPrefsValueAndAutoSave => PlayerPrefs.HasKey(this.Key) && this.AutoSave;
         private bool isLoaded;
 
-        public abstract IDataWrapper Wrapper { get; set; }
-        
-        public TData Value {
-            get {
-                if (!this.isLoaded) {
-                    this.defaultSerializedValue = this.Save();
-                    this.LoadData();
-                    this.isLoaded = true;
-                }
+        public abstract DataWrapper Wrapper { get; set; }
 
-                return this.value;
-            }
+        public TData Value {
+            get => this.value;
             set => this.SetValue(value);
         }
 
-        private void SetValue(TData newValue) {
+        public void SetValue(TData newValue) {
             this.value = newValue;
             this.OnChange(newValue);
         }
-
+        
+        public void SetValueNextFrame(TData newValue) {
+            this.value = newValue;
+            this.OnChangeNextFrame(newValue);
+        }
+        
+        private void OnChange() {
+            this.OnChange(this.value);
+        }
+        
         private void OnChange(TData newValue) {
             if (Application.isPlaying) {
                 this.CheckIsInitialized();
                 this.Publish(newValue);
-                this.SaveData();
             }
         }
-
-        protected abstract TData  Load([NotNull] string serializedData);
-        protected abstract string Save();
+        
+        private void OnChangeNextFrame(TData newValue) {
+            if (Application.isPlaying) {
+                this.CheckIsInitialized();
+                this.NextFrame(newValue);
+            }
+        }
 
         public virtual void Reset() {
             if (!string.IsNullOrEmpty(this.defaultSerializedValue)) {
-                this.value = this.Load(this.defaultSerializedValue);
+                this.value = this.Deserialize(this.defaultSerializedValue);
             }
         }
 
-        internal override void OnEnable() {
+        protected override void OnEnable() {
             base.OnEnable();
-            this.defaultSerializedValue               =  this.Save();
-            UnityRuntimeHelper.OnApplicationFocusLost += this.SaveData;
+            this.__internalKey = null;
+            UnityRuntimeHelper.onApplicationFocusLost += this.SaveData;
 #if UNITY_EDITOR
             if (string.IsNullOrEmpty(this.customKey)) {
                 this.GenerateCustomKey();
             }
-#else
-            this.LoadData();
 #endif
+            this.LoadData();
         }
 #if UNITY_EDITOR
-        internal override void OnEditorApplicationOnplayModeStateChanged(PlayModeStateChange state) {
+        protected override void OnEditorApplicationOnplayModeStateChanged(PlayModeStateChange state) {
             base.OnEditorApplicationOnplayModeStateChanged(state);
             if (state == PlayModeStateChange.EnteredEditMode) {
                 this.SaveData();
@@ -120,7 +123,7 @@
                 this.defaultSerializedValue = default;
                 this.isLoaded               = false;
             }
-            else if (state == PlayModeStateChange.EnteredPlayMode) {
+            else if (state == PlayModeStateChange.ExitingEditMode) {
                 this.LoadData();
             }
         }
@@ -132,39 +135,69 @@
         [HideInInlineEditors]
 #endif
 #if UNITY_EDITOR
-        private void GenerateCustomKey() => this.customKey = Guid.NewGuid().ToString().Replace("-", string.Empty);
+        private void GenerateCustomKey() {
+            this.__internalKey = null;
+            this.customKey = Guid.NewGuid().ToString().Replace("-", string.Empty);
+        } 
 #endif
         public override void Dispose() {
             base.Dispose();
-            UnityRuntimeHelper.OnApplicationFocusLost -= this.SaveData;
+            UnityRuntimeHelper.onApplicationFocusLost -= this.SaveData;
 #if UNITY_EDITOR
             if (!Application.isPlaying) {
                 return;
             }
 #endif
             this.SaveData();
+            this.isLoaded = false;
         }
 
         private void LoadData() {
-            if (!this.AutoSave) {
-                return;
-            }
 #if UNITY_EDITOR
-            if (!Application.isPlaying) {
-                return;
+            try {
+#endif
+    #if UNITY_EDITOR
+                if (!EditorApplication.isPlayingOrWillChangePlaymode) {
+                    return;
+                }
+    #endif
+                
+                if (this.isLoaded) {
+                    return;
+                }
+
+                this.defaultSerializedValue = this.Serialize(this.value);
+                this.isLoaded = true;
+                
+                if (!this.AutoSave) {
+                    return;
+                }
+                if (!PlayerPrefs.HasKey(this.Key)) {
+                    return;
+                }
+
+                this.value = this.Deserialize(PlayerPrefs.GetString(this.Key));
+#if UNITY_EDITOR
+            }
+            catch (Exception e) {
+                Debug.LogException(e);
             }
 #endif
-            if (!PlayerPrefs.HasKey(this.Key)) {
-                return;
-            }
-
-            this.value = this.Load(PlayerPrefs.GetString(this.Key));
         }
 
         internal void SaveData() {
-            if (this.AutoSave) {
-                PlayerPrefs.SetString(this.Key, this.Save());
+#if UNITY_EDITOR
+            try {
+#endif
+                if (this.AutoSave) {
+                    PlayerPrefs.SetString(this.Key, this.Serialize(this.value));
+                }
+#if UNITY_EDITOR
             }
+            catch (Exception e) {
+                Debug.LogException(e);
+            }
+#endif
         }
 
         #region EDITOR
@@ -184,7 +217,5 @@
 #endif
 
         #endregion
-
-
     }
 }

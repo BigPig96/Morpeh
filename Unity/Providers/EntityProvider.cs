@@ -3,8 +3,6 @@ namespace Morpeh {
     using Unity.IL2CPP.CompilerServices;
     using UnityEngine;
 #if UNITY_EDITOR && ODIN_INSPECTOR
-    using System;
-    using System.Collections.Generic;
     using Sirenix.OdinInspector;
 #endif
 
@@ -17,27 +15,27 @@ namespace Morpeh {
         [ShowInInspector]
         [ReadOnly]
 #endif
-        private int entityID = -1;
+        protected int internalEntityID = -1;
 
         [CanBeNull]
         private Entity InternalEntity {
             get {
                 if (this.IsPrefab()) {
-                    return null;
+                    return default;
                 }
 
                 if (!Application.isPlaying) {
-                    return null;
+                    return default;
                 }
 
                 if (this.cachedEntity == null) {
-                    if (World.Default != null && this.entityID >= 0 && World.Default.entitiesLength > this.entityID) {
-                        this.cachedEntity = World.Default.entities[this.entityID];
+                    if (World.Default != null && this.internalEntityID >= 0 && World.Default.entitiesLength > this.internalEntityID) {
+                        this.cachedEntity = World.Default.entities[this.internalEntityID];
                     }
                 }
-                else if (this.cachedEntity != null && this.cachedEntity.IsDisposed()) {
+                else if (this.cachedEntity != null && this.cachedEntity.isDisposed) {
                     this.cachedEntity = null;
-                    this.entityID     = -1;
+                    this.internalEntityID     = -1;
                 }
 
                 return this.cachedEntity;
@@ -47,30 +45,35 @@ namespace Morpeh {
         private Entity cachedEntity;
 
         [CanBeNull]
-        public IEntity Entity => this.InternalEntity;
+        public Entity Entity => this.InternalEntity;
 
         private protected virtual void OnEnable() {
+#if UNITY_EDITOR && ODIN_INSPECTOR
+            this.entityViewer.getter = () => this.InternalEntity;
+#endif
             if (!Application.isPlaying) {
                 return;
             }
 
-            if (this.entityID < 0) {
+            if (this.internalEntityID < 0) {
                 var others = this.GetComponents<EntityProvider>();
                 foreach (var entityProvider in others) {
-                    if (entityProvider.entityID >= 0) {
-                        this.entityID     = entityProvider.entityID;
+                    if (entityProvider.internalEntityID >= 0) {
+                        this.internalEntityID     = entityProvider.internalEntityID;
                         this.cachedEntity = entityProvider.cachedEntity;
                         break;
                     }
                 }
             }
-            
-            if (this.InternalEntity == null || this.entityID < 0) {
+
+            if (this.InternalEntity == null || this.internalEntityID < 0) {
                 var others = this.GetComponents<EntityProvider>();
-                this.cachedEntity = World.Default.CreateEntityInternal(out this.entityID);
+                this.cachedEntity = World.Default.CreateEntity(out this.internalEntityID);
                 foreach (var entityProvider in others) {
-                    entityProvider.entityID     = this.entityID;
-                    entityProvider.cachedEntity = this.cachedEntity;
+                    if (entityProvider.enabled) {
+                        entityProvider.internalEntityID     = this.internalEntityID;
+                        entityProvider.cachedEntity = this.cachedEntity;
+                    }
                 }
             }
 
@@ -86,8 +89,8 @@ namespace Morpeh {
         }
 
         private void CheckEntityIsAlive() {
-            if (this.InternalEntity == null || this.InternalEntity.IsDisposed()) {
-                this.entityID = -1;
+            if (this.InternalEntity == null || this.InternalEntity.isDisposed) {
+                this.internalEntityID = -1;
             }
         }
 
@@ -100,81 +103,17 @@ namespace Morpeh {
         }
 
 #if UNITY_EDITOR && ODIN_INSPECTOR
-        private bool IsNotEntityProvider => this.GetType() != typeof(EntityProvider);
+        private bool IsNotEntityProvider {
+            get {
+                var type = this.GetType();
+                return type != typeof(EntityProvider) && type != typeof(UniversalProvider);
+            }
+        }
 
         [HideIf("$" + nameof(IsNotEntityProvider))]
-        [DisableContextMenu]
-        [PropertySpace]
         [ShowInInspector]
-        [HideReferenceObjectPickerAttribute]
-        [ListDrawerSettings(DraggableItems = false, HideAddButton = true, HideRemoveButton = true)]
-        private List<ComponentView> ComponentsOnEntity {
-            get {
-                this.componentViews.Clear();
-                if (this.InternalEntity != null) {
-                    for (int i = 0, length = this.InternalEntity.componentsDoubleCapacity; i < length; i += 2) {
-                        if (this.InternalEntity.components[i] == -1) {
-                            continue;
-                        }
-
-                        var view = new ComponentView {
-                            debugInfo = CommonCacheTypeIdentifier.editorTypeAssociation[this.InternalEntity.components[i]],
-                            ID        = this.InternalEntity.components[i + 1],
-                            world     = this.InternalEntity.World
-                        };
-                        this.componentViews.Add(view);
-                    }
-                }
-
-                return this.componentViews;
-            }
-            set { }
-        }
-
-        private readonly List<ComponentView> componentViews = new List<ComponentView>();
-
-
-        [PropertyTooltip("$" + nameof(FullName))]
-        [Serializable]
-        private struct ComponentView {
-            internal CommonCacheTypeIdentifier.DebugInfo debugInfo;
-
-            internal World world;
-
-            internal bool   IsMarker => this.debugInfo.typeInfo.isMarker;
-            internal string FullName => this.debugInfo.type.FullName;
-
-            [ShowIf("$" + nameof(IsMarker))]
-            [HideLabel]
-            [DisplayAsString(false)]
-            [ShowInInspector]
-            internal string TypeName => this.debugInfo.type.Name;
-
-            internal int ID;
-
-            [DisableContextMenu]
-            [HideIf("$" + nameof(IsMarker))]
-            [LabelText("$" + nameof(TypeName))]
-            [ShowInInspector]
-            [HideReferenceObjectPickerAttribute]
-            public object Data {
-                get {
-                    if (this.debugInfo.typeInfo.isMarker) {
-                        return null;
-                    }
-
-                    return this.debugInfo.getBoxed(this.world, this.ID);
-                }
-                set {
-                    if (this.debugInfo.typeInfo.isMarker) {
-                        return;
-                    }
-
-                    this.debugInfo.setBoxed(this.world, this.ID, value);
-                }
-            }
-        }
-
+        [PropertyOrder(100)]
+        private Editor.EntityViewerWithHeader entityViewer = new Editor.EntityViewerWithHeader();
 #endif
     }
 }

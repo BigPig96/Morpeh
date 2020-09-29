@@ -5,15 +5,15 @@ namespace Morpeh.Globals {
     [Il2CppSetOption(Option.NullChecks, false)]
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
     [Il2CppSetOption(Option.DivideByZeroChecks, false)]
-    [CreateAssetMenu(menuName = "ECS/Globals/Event")]
+    [CreateAssetMenu(menuName = "ECS/Globals/Events/Event")]
     public class GlobalEvent : GlobalEventInt {
         [ContextMenu("Publish")]
-        public void Publish() {
+        public virtual void Publish() {
             base.Publish(-1);
         }
         
         [ContextMenu("NextFrame")]
-        public void NextFrame() {
+        public virtual void NextFrame() {
             base.NextFrame(-1);
         }
     }

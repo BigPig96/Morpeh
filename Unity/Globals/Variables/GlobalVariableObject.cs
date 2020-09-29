@@ -8,25 +8,27 @@
     [Il2CppSetOption(Option.NullChecks, false)]
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
     [Il2CppSetOption(Option.DivideByZeroChecks, false)]
-    [CreateAssetMenu(menuName = "ECS/Globals/Variable Object")]
+    [CreateAssetMenu(menuName = "ECS/Globals/Variables/Variable Object")]
     public class GlobalVariableObject : BaseGlobalVariable<Object> {
-        public override IDataWrapper Wrapper {
-            get => new ObjectWrapper {obj = this.value};
-            set => this.Value = ((ObjectWrapper) value).obj;
+        public override DataWrapper Wrapper {
+            get => new ObjectWrapper {value = this.value};
+            set => this.Value = ((ObjectWrapper) value).value;
         }
         
         public override bool CanBeAutoSaved => false;
 
-        protected override Object Load(string serializedData) => JsonUtility.FromJson<ObjectWrapper>(serializedData).obj;
+        public override Object Deserialize(string serializedData) => JsonUtility.FromJson<ObjectWrapper>(serializedData).value;
 
-        protected override string Save() => JsonUtility.ToJson(new ObjectWrapper {obj = this.value});
+        public override string Serialize(Object data) => JsonUtility.ToJson(new ObjectWrapper {value = data});
         
         [Il2CppSetOption(Option.NullChecks, false)]
         [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
         [Il2CppSetOption(Option.DivideByZeroChecks, false)]
         [Serializable]
-        private class ObjectWrapper : IDataWrapper {
-            public Object obj;
+        private class ObjectWrapper : DataWrapper {
+            public Object value;
+            
+            public override string ToString() => this.value.ToString();
         }
     }
 }

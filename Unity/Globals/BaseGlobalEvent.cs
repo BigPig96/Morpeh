@@ -11,11 +11,10 @@ namespace Morpeh.Globals {
     [Il2CppSetOption(Option.ArrayBoundsChecks, false)]
     [Il2CppSetOption(Option.DivideByZeroChecks, false)]
     public abstract class BaseGlobalEvent<TData> : BaseGlobal {
-        
 #if UNITY_EDITOR
         public override Type GetValueType() => typeof(TData);
 #endif
-        
+
         public Stack<TData> BatchedChanges {
             get {
 #if UNITY_EDITOR
@@ -29,32 +28,59 @@ namespace Morpeh.Globals {
             }
         }
 
-        private protected override void CheckIsInitialized() {
-            if (this.internalEntityID < 0) {
-                var ent = World.Default.CreateEntityInternal(out this.internalEntityID);
+        public sealed override string LastToString() => this.Serialize(this.BatchedChanges.Peek());
+        public abstract string Serialize(TData data);
+        public abstract TData  Deserialize(string serializedData);
 
-                ent.AddComponent<GlobalEventMarker>();
-                ent.SetComponent(new GlobalEventComponent<TData> {
+        protected override bool CheckIsInitialized() {
+            var world = World.Default;
+            var check = base.CheckIsInitialized();
+            if (check) {
+                this.internalEntity.AddComponent<GlobalEventMarker>();
+                this.internalEntity.SetComponent(new GlobalEventComponent<TData> {
                     Action = null,
                     Data   = new Stack<TData>()
                 });
+                this.internalEntity.SetComponent(new GlobalEventLastToString {
+                    LastToString = this.LastToString
+                });
             }
 
-            if (!GlobalEventComponent<TData>.Initialized) {
-                GlobalEventComponentUpdater.Updaters.Add(new GlobalEventComponentUpdater<TData>());
-                GlobalEventComponent<TData>.Initialized = true;
+            if (GlobalEventComponentUpdater<TData>.initialized.TryGetValue(world.identifier, out var initialized)) {
+                if (initialized == false) {
+                    var updater = new GlobalEventComponentUpdater<TData>();
+                    updater.Awake(world);
+                    if (GlobalEventComponentUpdater.updaters.TryGetValue(world.identifier, out var updaters)) {
+                        updaters.Add(updater);
+                    }
+                    else {
+                        GlobalEventComponentUpdater.updaters.Add(world.identifier, new List<GlobalEventComponentUpdater> {updater});
+                    }
+                }
             }
+            else {
+                var updater = new GlobalEventComponentUpdater<TData>();
+                updater.Awake(world);
+                if (GlobalEventComponentUpdater.updaters.TryGetValue(world.identifier, out var updaters)) {
+                    updaters.Add(updater);
+                }
+                else {
+                    GlobalEventComponentUpdater.updaters.Add(world.identifier, new List<GlobalEventComponentUpdater> {updater});
+                }
+            }
+
+            return check;
         }
 
 
-        public void Publish(TData data) {
+        public virtual void Publish(TData data) {
             this.CheckIsInitialized();
             ref var component = ref this.InternalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
             component.Data.Push(data);
             this.InternalEntity.SetComponent(new GlobalEventPublished());
         }
 
-        public void NextFrame(TData data) {
+        public virtual void NextFrame(TData data) {
             this.CheckIsInitialized();
             ref var component = ref this.InternalEntity.GetComponent<GlobalEventComponent<TData>>(out _);
             component.Data.Push(data);
@@ -68,7 +94,7 @@ namespace Morpeh.Globals {
 
             var ent = this.InternalEntity;
             return new Unsubscriber(() => {
-                if (ent == null) {
+                if (ent.IsNullOrDisposed()) {
                     return;
                 }
 
